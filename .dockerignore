@@ -1,0 +1,4 @@
+.ha-validator
+notify_test_device.log
+__pycache__
+*.pyc

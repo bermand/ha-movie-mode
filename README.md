@@ -52,3 +52,46 @@ You can also customize:
 1. Add this blueprint
 2. Fill in the fields with your media player, lights, and notification settings.
 3. Enjoy hands-free ambience for your movie nights!
+
+---
+
+## 🧪 Validate the blueprint locally
+
+An MVP validator is included to generate a throwaway Home Assistant configuration and optionally run `hass --script check_config` against it.
+
+1. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Generate the validation bundle (creates `.ha-validator/` with a demo config and copies the blueprint):
+
+   ```bash
+   python validator.py movie-mode.yaml
+   ```
+
+3. If you have Home Assistant installed locally, run the built-in config check:
+
+   ```bash
+   python validator.py movie-mode.yaml --run-check-config
+   ```
+
+   The script will report whether `hass --script check_config` succeeded and surface any schema issues it found.
+
+### 🐳 Validate using Docker (includes Home Assistant)
+
+If you do not have Home Assistant installed locally, you can run the validator inside a container that bundles all dependencies:
+
+```bash
+# Build the validator image
+docker build -t ha-movie-mode-validator .
+
+# Run the validation with hass --script check_config
+docker run --rm ha-movie-mode-validator
+
+# To keep the generated .ha-validator directory, mount the repo as a volume
+docker run --rm -v "$PWD":/app ha-movie-mode-validator
+```
+
+The default container command mirrors `python validator.py movie-mode.yaml --run-check-config` and will exit non-zero if the config check fails.
