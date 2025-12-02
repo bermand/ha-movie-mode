@@ -1,15 +1,15 @@
 # 🎥 Movie Mode Light Control
-## Turn Off Lights Automatically During Movies!
+## Apply a Movie Scene Automatically During Movies!
 
-**Movie Mode Light Control**, designed to help automate your movie nights by dimming the environment when your movie starts — and bringing everything back to life when you pause or stop.
+**Movie Mode Light Control**, designed to help automate your movie nights by activating a custom scene when your movie starts — and bringing everything back to its prior state when you pause or stop.
 
 ### 🎥 What It Does
 
 This blueprint detects when your media player (e.g., TV or streaming device) starts playing and:
 
 * **Sends a notification** asking if you want to activate Movie Mode.
-* **Turns off selected lights or switches** automatically when Movie Mode is enabled.
-* **Restores your previous light/switch states** when the movie is paused or stopped.
+* **Activates a chosen scene** automatically when Movie Mode is enabled.
+* **Captures and restores your previous light/switch states** when the movie is paused or stopped.
 * **Automatically disables Movie Mode** when the media ends or stops.
 * **Only activates after a specific time** (e.g., after 9:00 PM) to avoid triggering during the day.
 
@@ -30,6 +30,7 @@ You can also customize:
 * Notification title & message
 * Trigger states for play, pause, and off
 * Lights/switches to be controlled
+* Scene to apply while in Movie Mode
 
 ---
 
@@ -40,6 +41,7 @@ You can also customize:
 * Movie Mode Helper (input_boolean)
 * Notification Target (optional)
 * Lights/Switches to control
+* Scene to activate during Movie Mode
 * Activation time (e.g., 21:00)
 
 ---

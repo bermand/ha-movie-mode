@@ -3,16 +3,16 @@ blueprint:
   author: Murat Çeşmecioğlu
   description: >
     # 🎥 Movie Mode Light Control
-    
-    Turns off selected lights/switches when watching a movie after a certain time. Sends a notification asking to enable movie mode. Restores light states on pause or stop.
-    
-    
+
+    Activates a chosen scene when movie mode starts while preserving the current state of selected lights/switches. Sends a notification asking to enable movie mode. Restores the previously captured scene on pause or stop, with guards to avoid overwriting the saved state.
+
+
     Simple.
-    
-    
+
+
     Required Input = *
-    
-    
+
+
     Read  more: https://community.home-assistant.io/t/movie-mode-light-control/886100
   domain: automation
   source_url: https://github.com/muratcesmecioglu/ha-movie-mode/blob/main/movie-mode.yaml
@@ -152,15 +152,22 @@ blueprint:
     controlled_entities:
       name: Lights/Switches to Control *
       description: >
-        These lights or switches will be turned off during movie mode and restored after.
+        These lights or switches will be captured before movie mode and restored afterward.
         **! Important !** - You can only use entities. Others are not supported.
       default: []
       selector:
         target:
           entity:
-            domain: 
+            domain:
               - light
               - switch
+
+    movie_scene:
+      name: Movie Scene *
+      description: Scene to activate while in movie mode.
+      selector:
+        entity:
+          domain: scene
 
     start_time:
       name: Earliest Activation Time
@@ -189,9 +196,13 @@ variables:
     notify_target: !input notify_target
     light_entities: "{{ expand(controlled_entities.entity_id) | selectattr('domain', 'eq', 'light') | map(attribute='entity_id') | list }}"
     switch_entities: "{{ expand(controlled_entities.entity_id) | selectattr('domain', 'eq', 'switch') | map(attribute='entity_id') | list }}"
+    has_targets: "{{ (light_entities | length + switch_entities | length) > 0 }}"
     notify_device: "notify.{{ notify_target }}"
     app_cond: !input app_cond
     media_player: !input media_player
+    movie_scene: !input movie_scene
+    snapshot_scene: scene.movie_mode_previous_state
+    snapshot_available: "{{ states(snapshot_scene) not in ['unknown', 'unavailable', ''] }}"
 
 trigger:
   - trigger: state
@@ -229,81 +240,69 @@ action:
             state: 'off'
         sequence:
           - choose:
-            # If notify_target is set → send notification and wait for response
-            - conditions:
-                - condition: template
-                  value_template: "{{ notify_target != '' }}"
-              sequence:
-                - service: "{{ notify_device }}"
-                  data:
-                    title: !input notify_title
-                    message: !input notify_message
+              # If notify_target is set → send notification and wait for response
+              - conditions:
+                  - condition: template
+                    value_template: "{{ notify_target != '' }}"
+                sequence:
+                  - service: "{{ notify_device }}"
                     data:
-                      actions:
-                        - action: "ENABLE_MOVIE_MODE"
-                          title: "Enable"
-                        - action: "IGNORE"
-                          title: "Ignore"
-        
-                - wait_for_trigger:
-                    - platform: event
-                      event_type: mobile_app_notification_action
-                      event_data:
-                        action: "ENABLE_MOVIE_MODE"
-                  timeout:
-                    minutes: 2
-        
+                      title: !input notify_title
+                      message: !input notify_message
+                      data:
+                        actions:
+                          - action: "ENABLE_MOVIE_MODE"
+                            title: "Enable"
+                          - action: "IGNORE"
+                            title: "Ignore"
+
+                  - wait_for_trigger:
+                      - platform: event
+                        event_type: mobile_app_notification_action
+                        event_data:
+                          action: "ENABLE_MOVIE_MODE"
+                    timeout:
+                      minutes: 2
+
                 - choose:
                     - conditions:
                         - condition: template
                           value_template: >
                             {{ wait.trigger is defined and wait.trigger.event.data.action == "ENABLE_MOVIE_MODE" }}
                       sequence:
-                        - service: light.turn_off
-                          data:
-                            entity_id: "{{ light_entities }}"
-                        - service: switch.turn_off
-                          data:
-                            entity_id: "{{ switch_entities }}"
+                        - choose:
+                            - conditions:
+                                - condition: template
+                                  value_template: "{{ has_targets }}"
+                              sequence:
+                                - service: scene.create
+                                  data:
+                                    scene_id: "{{ snapshot_scene | replace('scene.', '') }}"
+                                    snapshot_entities: "{{ light_entities + switch_entities }}"
+                        - service: scene.turn_on
+                          target:
+                            entity_id: !input movie_scene
                         - service: input_boolean.turn_on
                           target:
                             entity_id: !input movie_mode_helper
-        
-            # If no notify_target → activate movie mode immediately
-            - conditions:
-                - condition: template
-                  value_template: "{{ notify_target == '' }}"
-              sequence:
-                - service: light.turn_off
-                  data:
-                    entity_id: "{{ light_entities }}"
-                - service: switch.turn_off
-                  data:
-                    entity_id: "{{ switch_entities }}"
-                - service: input_boolean.turn_on
-                  target:
-                    entity_id: !input movie_mode_helper
 
-          
-          
-          
-          
-          
-
-          - choose:
-              - conditions:
-                  - condition: template
-                    value_template: >
-                      {{ wait.trigger is defined and wait.trigger.event.data.action == "ENABLE_MOVIE_MODE" }}
-                sequence:
-                  # Turn off all lights/switches
-                  - service: light.turn_off
-                    data:
-                      entity_id: "{{ light_entities }}"
-                  - service: switch.turn_off
-                    data:
-                      entity_id: "{{ switch_entities }}"
-                  # Set movie mode ON
+              # If no notify_target → activate movie mode immediately
+                - conditions:
+                    - condition: template
+                      value_template: "{{ notify_target == '' }}"
+                  sequence:
+                    - choose:
+                        - conditions:
+                            - condition: template
+                              value_template: "{{ has_targets }}"
+                        sequence:
+                          - service: scene.create
+                            data:
+                              scene_id: "{{ snapshot_scene | replace('scene.', '') }}"
+                              snapshot_entities: "{{ light_entities + switch_entities }}"
+                    - service: scene.turn_on
+                      target:
+                        entity_id: !input movie_scene
                   - service: input_boolean.turn_on
                     target:
                       entity_id: !input movie_mode_helper
@@ -316,14 +315,16 @@ action:
             entity_id: !input movie_mode_helper
             state: 'on'
         sequence:
-          - service: light.turn_on
-            data:
-              entity_id: "{{ light_entities }}"
-          - service: switch.turn_on
-            data:
-              entity_id: "{{ switch_entities }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ snapshot_available }}"
+                sequence:
+                  - service: scene.turn_on
+                    target:
+                      entity_id: "{{ snapshot_scene }}"
 
-  # Handle resumed → turn off lights
+  # Handle resumed → re-apply movie scene
       - conditions:
           - condition: trigger
             id: 't_play'
@@ -331,12 +332,9 @@ action:
             entity_id: !input movie_mode_helper
             state: 'on'
         sequence:
-          - service: light.turn_off
-            data:
-              entity_id: "{{ light_entities }}"
-          - service: switch.turn_off
-            data:
-              entity_id: "{{ switch_entities }}"
+          - service: scene.turn_on
+            target:
+              entity_id: !input movie_scene
 
   # Handle stop → restore and end movie mode
       - conditions:
@@ -349,9 +347,11 @@ action:
           - service: input_boolean.turn_off
             target:
               entity_id: !input movie_mode_helper
-          - service: light.turn_on
-            data:
-              entity_id: "{{ light_entities }}"
-          - service: switch.turn_on
-            data:
-              entity_id: "{{ switch_entities }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ snapshot_available }}"
+                sequence:
+                  - service: scene.turn_on
+                    target:
+                      entity_id: "{{ snapshot_scene }}"
